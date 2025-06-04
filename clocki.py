@@ -6,6 +6,14 @@ clockiPy: A CLI tool for fetching and displaying Clockify time entries in a clea
 - Exports to CSV and Markdown
 - Can be used as a CLI (via `python clocki.py` or `clockipy` if installed as a package)
 
+Add to eg .zshrc via script: 
+
+clockipy(){
+    conda activate worktime
+    cd /Users/renelachmann/Projects/helperTools/clockiPy
+    python clocki.py "$@"
+}
+
 Environment variables are loaded from `clockipy.env` (see `clockipy.env.example`).
 """
 import os

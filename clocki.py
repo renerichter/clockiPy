@@ -22,7 +22,7 @@ import csv
 import markdown
 
 # --- Environment Setup ---
-ENV_FILE = 'clockipy.env'
+ENV_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'clockipy.env')
 if not os.path.exists(ENV_FILE):
     print(f"Missing environment file: {ENV_FILE}")
     sys.exit(1)
@@ -361,24 +361,24 @@ def date_interface(start_str: Optional[str] = None, end_str: Optional[str] = Non
             subproject_durations[key] += duration_sec
         if subproject_durations:
             subproject_table = [
-                [subproject, project, f"{secs // 3600:02}:{(secs % 3600) // 60:02}"]
+                [subproject, project, percent(secs, total_duration), f"{secs // 3600:02}:{(secs % 3600) // 60:02}"]
                 for (subproject, project), secs in subproject_durations.items()
             ]
             # Sort by duration (descending)
-            subproject_table.sort(key=lambda x: int(x[2][:2])*60 + int(x[2][3:]), reverse=True)
+            subproject_table.sort(key=lambda x: int(x[3][:2])*60 + int(x[3][3:]), reverse=True)
             print(f"\n### Time by SubProject {date_range_str}:")
-            print(tabulate(subproject_table, headers=["SubProject", "Project", "Duration"], tablefmt="github"))
+            print(tabulate(subproject_table, headers=["SubProject", "Project", "%/Day", "Duration"], tablefmt="github"))
             if csv_prefix:
-                write_csv(f"{csv_prefix}_subprojects.csv", ["SubProject", "Project", "Duration"], subproject_table)
+                write_csv(f"{csv_prefix}_subprojects.csv", ["SubProject", "Project", "%/Day", "Duration"], subproject_table)
         # Project Table
         print_proj_header = percent_header
         proj_table = [
-            [proj, f"{secs // 3600:02}:{(secs % 3600) // 60:02}", percent(secs, total_duration)] for proj, secs in sorted(project_durations.items())
+            [proj, percent(secs, total_duration), f"{secs // 3600:02}:{(secs % 3600) // 60:02}"] for proj, secs in sorted(project_durations.items())
         ]
         print(f"\n### Time by Project {date_range_str}:")
-        print(tabulate(proj_table, headers=["Project", "Duration", print_proj_header], tablefmt="github"))
+        print(tabulate(proj_table, headers=["Project", print_proj_header, "Duration"], tablefmt="github"))
         if csv_prefix:
-            write_csv(f"{csv_prefix}_projects.csv", ["Project", "Duration", print_proj_header], proj_table)
+            write_csv(f"{csv_prefix}_projects.csv", ["Project", print_proj_header, "Duration"], proj_table)
         # Tag Table
         if tag_durations:
             print(f"\n### Time by Tag {date_range_str}:")
@@ -389,40 +389,47 @@ def date_interface(start_str: Optional[str] = None, end_str: Optional[str] = Non
                     return (custom_tag_order.index(tag), tag)
                 return (len(custom_tag_order), tag)
             tag_table = [
-                [tag, f"{secs // 3600:02}:{(secs % 3600) // 60:02}", percent(secs, total_duration)] for tag, secs in tag_durations.items()
+                [tag, percent(secs, total_duration), f"{secs // 3600:02}:{(secs % 3600) // 60:02}"] for tag, secs in tag_durations.items()
             ]
             tag_table.sort(key=tag_sort_key)
-            print(tabulate(tag_table, headers=["Tag", "ΣDuration", percent_header], tablefmt="github"))
+            print(tabulate(tag_table, headers=["Tag", percent_header, "ΣDuration"], tablefmt="github"))
             if csv_prefix:
-                write_csv(f"{csv_prefix}_tags.csv", ["Tag", "ΣDuration", percent_header], tag_table)
+                write_csv(f"{csv_prefix}_tags.csv", ["Tag", percent_header, "ΣDuration"], tag_table)
         # Spontaneousity Table
         spont_total = sum(spontaneousity_durations.values())
         if spont_total > 0:
             print(f"\n### Spontaneousity {date_range_str}:")
             spont_order = ["🗓️", "🎲"]
             spont_table = [
-                [symbol, f"{secs // 3600:02}:{(secs % 3600) // 60:02}", percent(secs, spont_total)] for symbol, secs in spontaneousity_durations.items() if secs > 0
+                [symbol, percent(secs, spont_total), f"{secs // 3600:02}:{(secs % 3600) // 60:02}"] for symbol, secs in spontaneousity_durations.items() if secs > 0
             ]
             spont_table.sort(key=lambda row: spont_order.index(row[0]) if row[0] in spont_order else len(spont_order))
-            print(tabulate(spont_table, headers=["🎲/🗓️", "Duration", percent_header], tablefmt="github"))
+            print(tabulate(spont_table, headers=["🎲/🗓️", percent_header, "Duration"], tablefmt="github"))
             if csv_prefix:
-                write_csv(f"{csv_prefix}_spont.csv", ["🎲/🗓️", "Duration", percent_header], spont_table)
+                write_csv(f"{csv_prefix}_spont.csv", ["🎲/🗓️", percent_header, "Duration"], spont_table)
         # Totals Table (replaces ASCII art)
         print(f"\n### Totals {date_range_str}:")
+        # Dur-Plan total: sum of abs differences per task
+        abs_total_difference = 0
+        for task_name, indices in task_groups.items():
+            planned_sec = parse_planned_from_name(task_name)
+            total_measured = sum(table_rows[i][-1] for i in indices)
+            abs_total_difference += abs(total_measured - planned_sec)
         totals_table = []
-        totals_table.append(["ΣDuration", f"{total_duration // 3600:02}:{(total_duration % 3600) // 60:02}"])
-        if total_difference != 0:
-            sign = "+" if total_difference > 0 else "-"
-            abs_diff = abs(total_difference)
+        totals_table.append(["ΣDuration", "0%", f"{total_duration // 3600:02}:{(total_duration % 3600) // 60:02}"])
+        if abs_total_difference != 0:
+            abs_diff = abs_total_difference
             diff_h = abs_diff // 3600
             diff_m = (abs_diff % 3600) // 60
-            measured_result_str = f"{sign}{diff_h:02}:{diff_m:02}"
+            measured_result_str = f"{diff_h:02}:{diff_m:02}"
+            percent_deviation = f"{(abs_total_difference / total_duration * 100):.0f}%" if total_duration else "0%"
         else:
             measured_result_str = "00:00"
-        totals_table.append(["Dur-Plan Total", measured_result_str])
-        print(tabulate(totals_table, headers=["Total", "h:mm"], tablefmt="github"))
+            percent_deviation = "0%"
+        totals_table.append(["Dur-Plan Total", percent_deviation,measured_result_str])
+        print(tabulate(totals_table, headers=["Total", "% Dev", "h:mm"], tablefmt="github"))
         if csv_prefix:
-            write_csv(f"{csv_prefix}_totals.csv", ["Total", "h:mm"], totals_table)
+            write_csv(f"{csv_prefix}_totals.csv", ["Total", "% Dev", "h:mm"], totals_table)
         print()  # extra newline
     # --- Mode logic ---
     import io

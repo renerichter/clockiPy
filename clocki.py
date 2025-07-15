@@ -336,12 +336,18 @@ def date_interface(start_str: Optional[str] = None, end_str: Optional[str] = Non
         for idx, row in enumerate(table_rows):
             task_name = row[1]
             task_groups[task_name].append(idx)
+        less_planned_than_measured = 0
+        more_planned_than_measured = 0
         total_difference = 0
         for task_name, indices in task_groups.items():
             planned_sec = parse_planned_from_name(task_name)
             total_measured = sum(table_rows[i][-1] for i in indices)
             diff_sec = total_measured - planned_sec
-            total_difference += diff_sec
+            if planned_sec > total_measured: 
+                more_planned_than_measured += diff_sec
+            else:
+                less_planned_than_measured +=diff_sec
+            total_difference += abs(diff_sec)
             for i in indices[:-1]:
                 table_rows[i][-3] = "00:00"
             if planned_sec:
@@ -381,7 +387,7 @@ def date_interface(start_str: Optional[str] = None, end_str: Optional[str] = Non
         # Project Table
         print_proj_header = percent_header
         proj_table = [
-            [proj, percent(secs, total_duration), f"{secs // 3600:02}:{(secs % 3600) // 60:02}"] for proj, secs in sorted(project_durations.items())
+            [proj, percent(secs, total_duration), f"{secs // 3600:02}:{(secs % 3600) // 60:02}"] for proj, secs in sorted(project_durations.items(), key=lambda x: x[1], reverse=True)
         ]
         print(f"\n### Time by Project {date_range_str}:")
         print(tabulate(proj_table, headers=["Project", print_proj_header, "Duration"], tablefmt="github"))
@@ -418,24 +424,27 @@ def date_interface(start_str: Optional[str] = None, end_str: Optional[str] = Non
         # Totals Table (replaces ASCII art)
         print(f"\n### Totals {date_range_str}:")
         # Dur-Plan total: sum of abs differences per task
-        abs_total_difference = 0
-        for task_name, indices in task_groups.items():
-            planned_sec = parse_planned_from_name(task_name)
-            total_measured = sum(table_rows[i][-1] for i in indices)
-            abs_total_difference += abs(total_measured - planned_sec)
+        # abs_total_difference = 0
+        #for task_name, indices in task_groups.items():
+        #    planned_sec = parse_planned_from_name(task_name)
+        #    total_measured = sum(table_rows[i][-1] for i in indices)
+        #    abs_total_difference += abs(total_measured - planned_sec)
         totals_table = []
         totals_table.append(["ΣDuration", "0%", f"{total_duration // 3600:02}:{(total_duration % 3600) // 60:02}"])
-        if abs_total_difference != 0:
-            abs_diff = abs_total_difference
-            diff_h = abs_diff // 3600
-            diff_m = (abs_diff % 3600) // 60
-            measured_result_str = f"{diff_h:02}:{diff_m:02}"
-            percent_deviation = f"{(abs_total_difference / total_duration * 100):.0f}%" if total_duration else "0%"
-        else:
-            measured_result_str = "00:00"
-            percent_deviation = "0%"
-        totals_table.append(["Dur-Plan Total", percent_deviation,measured_result_str])
-        print(tabulate(totals_table, headers=["Total", "% Dev", "h:mm"], tablefmt="github"))
+        
+        less_plan=less_planned_than_measured
+        more_plan=more_planned_than_measured
+        less_plan_measured_result_str = f"{less_plan// 3600:02}:{(less_plan%3600) // 60:02}"
+        more_plan_measured_result_str = f"{more_plan// 3600:02}:{(more_plan%3600) // 60:02}"
+        more_plan_measured_result_str = f"{more_plan// 3600:02}:{(more_plan%3600) // 60:02}"
+        total_difference_result_str = f"{total_difference// 3600:02}:{(total_difference%3600) // 60:02}"
+        less_percent_deviation = f"{(abs(less_plan) / total_duration * 100):.0f}%" if total_duration else "0%"
+        more_percent_deviation = f"{(abs(more_plan) / total_duration * 100):.0f}%" if total_duration else "0%"
+        total_difference_percent_deviation = f"{(abs(total_difference) / total_duration * 100):.0f}%" if total_duration else "0%"
+        totals_table.append(["Meas>Plan Total", less_percent_deviation,less_plan_measured_result_str])
+        totals_table.append(["Meas<Plan Total", more_percent_deviation,more_plan_measured_result_str])
+        totals_table.append(["Abs(Dur-Plan) Total", total_difference_percent_deviation,total_difference_result_str])
+        print(tabulate(totals_table, headers=["Total", "Dev (%)", "Abs (h:mm)",], tablefmt="github"))
         if csv_prefix:
             write_csv(f"{csv_prefix}_totals.csv", ["Total", "% Dev", "h:mm"], totals_table)
         print()  # extra newline

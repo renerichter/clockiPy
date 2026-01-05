@@ -1,30 +1,34 @@
 from setuptools import setup, find_packages
 
+with open("README.md", "r") as fh:
+    long_description = fh.read()
+
 setup(
-    name='clockiPy',
-    version='0.1.0',
-    description='A CLI tool for fetching and displaying Clockify time entries in a clean table.',
-    author='René Lachmann',
+    name="clockipy",
+    version="0.2.0",
+    author="Rene Lachmann",
+    author_email="rene.lachmann@gmail.com",
+    description="A CLI tool for fetching and displaying Clockify time entries in a clean table",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/renelachmann/clockiPy",
     packages=find_packages(),
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+    ],
+    python_requires=">=3.6",
     install_requires=[
-        'requests',
-        'tabulate',
-        'python-dotenv',
-        'markdown',
+        "requests",
+        "tabulate",
+        "python-dotenv",
+        "markdown",
     ],
     entry_points={
-        'console_scripts': [
-            'clockipy=clockify_cli:main',
+        "console_scripts": [
+            "clockipy=clockipy.__main__:main",
         ],
     },
     include_package_data=True,
-    package_data={
-        '': ['clockipy.env.example'],
-    },
-    python_requires='>=3.7',
-    classifiers=[
-        'Programming Language :: Python :: 3',
-        'License :: OSI Approved :: MIT License',
-        'Operating System :: OS Independent',
-    ],
 ) 

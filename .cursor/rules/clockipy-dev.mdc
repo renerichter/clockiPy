@@ -1,0 +1,64 @@
+---
+description: clockiPy development guidelines - Python environment and project conventions
+globs:
+  - "**/*.py"
+  - "**/*.md"
+  - "**/requirements.txt"
+  - "**/setup.py"
+alwaysApply: true
+---
+
+# clockiPy Development Rules
+
+## 1. Environment Setup (CRITICAL - Read First)
+
+Before running any Python commands, you MUST check and use the correct environment:
+
+### Priority Order:
+1. **Conda environment `worktime`** (PREFERRED if available)
+2. **Local venv** (`.venv/` in project root) as fallback
+
+### Environment Detection Commands:
+```bash
+# Check if conda worktime exists
+conda activate worktime && conda info --envs | grep worktime
+
+# If conda fails, use local venv
+source .venv/bin/activate
+```
+
+### Running Python Commands:
+- Always activate environment BEFORE running Python/pip commands
+- Use `python` (not `python3`) after activating conda
+- Use `python` or `python3` with venv depending on system
+
+## 2. Project Context
+
+Read `README.md` before making changes to understand:
+- Available CLI modes: `normal`, `week`, `month`, `year`
+- Time entry format: `{ph:mm}` for planned duration
+- Environment variables required in `clockipy.env`
+
+## 3. Testing
+
+Run tests with:
+```bash
+# With conda
+conda activate worktime && python -m unittest discover tests/ -v
+
+# With venv
+source .venv/bin/activate && python -m unittest discover tests/ -v
+```
+
+## 4. Code Conventions
+
+- No comments in code (see user rules 2.5)
+- Follow existing patterns in `clockipy/` structure
+- Use type hints for function signatures
+- Tests go in `tests/` directory
+
+## 5. Dependencies
+
+- Defined in `requirements.txt`
+- Install with: `pip install -r requirements.txt`
+- Main deps: requests, tabulate, python-dotenv, markdown

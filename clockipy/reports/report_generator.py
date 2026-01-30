@@ -61,12 +61,19 @@ class ReportGenerator:
             occ_data["measured"] += entry.duration_sec
             occ_data["entries"].append(entry)
 
+        # Precomputed deviation allocations by dimension
+        self.project_plan_diffs = defaultdict(lambda: {"less_plan": 0, "more_plan": 0})
+        self.subproject_plan_diffs = defaultdict(lambda: {"less_plan": 0, "more_plan": 0})
+        self.tag_plan_diffs = defaultdict(lambda: {"less_plan": 0, "more_plan": 0})
+        self.spont_plan_diffs = defaultdict(lambda: {"less_plan": 0, "more_plan": 0})
+
         # Build occurrence summaries and deviation totals
         for (task_identity, occ_date), data in self.task_occurrences.items():
             description, project, task_name = task_identity
             planned = data["planned"]
             measured = data["measured"]
             diff = measured - planned if planned > 0 else 0
+            occ_entries = data["entries"]
             self.occurrences.append({
                 "description": description,
                 "project": project,
@@ -75,7 +82,7 @@ class ReportGenerator:
                 "planned": planned,
                 "measured": measured,
                 "diff": diff,
-                "entries": data["entries"],
+                "entries": occ_entries,
             })
 
             if planned > 0:
@@ -84,6 +91,58 @@ class ReportGenerator:
                 elif diff < 0:
                     self.plan_deviation_totals["under"] += abs(diff)
                 self.plan_deviation_totals["abs"] += abs(diff)
+
+                # Allocate to project
+                if diff > 0:
+                    self.project_plan_diffs[project]["more_plan"] += diff
+                elif diff < 0:
+                    self.project_plan_diffs[project]["less_plan"] += abs(diff)
+
+                # Allocate to subproject
+                subproject_key = (task_name, project)
+                if diff > 0:
+                    self.subproject_plan_diffs[subproject_key]["more_plan"] += diff
+                elif diff < 0:
+                    self.subproject_plan_diffs[subproject_key]["less_plan"] += abs(diff)
+
+                # Allocate to spontaneity
+                first_entry = occ_entries[0] if occ_entries else None
+                if first_entry and (first_entry.is_spontaneous or first_entry.is_scheduled):
+                    symbol = "🎲" if first_entry.is_spontaneous else "🗓️"
+                    if diff > 0:
+                        self.spont_plan_diffs[symbol]["more_plan"] += diff
+                    elif diff < 0:
+                        self.spont_plan_diffs[symbol]["less_plan"] += abs(diff)
+
+                # Allocate to tags proportionally
+                if diff != 0:
+                    tag_durations = defaultdict(int)
+                    total_occ_duration = 0
+                    for entry in occ_entries:
+                        total_occ_duration += entry.duration_sec
+                        for tag in entry.tag_names:
+                            tag_durations[tag] += entry.duration_sec
+
+                    if tag_durations:
+                        if total_occ_duration <= 0:
+                            total_occ_duration = len(tag_durations)
+                            for tag in tag_durations:
+                                tag_durations[tag] = 1
+
+                        abs_diff = abs(diff)
+                        allocated_sum = 0
+                        tag_list = list(tag_durations.items())
+                        for i, (tag, tag_duration) in enumerate(tag_list):
+                            if i == len(tag_list) - 1:
+                                allocated = abs_diff - allocated_sum
+                            else:
+                                share = tag_duration / total_occ_duration
+                                allocated = int(round(abs_diff * share))
+                                allocated_sum += allocated
+                            if diff > 0:
+                                self.tag_plan_diffs[tag]["more_plan"] += allocated
+                            else:
+                                self.tag_plan_diffs[tag]["less_plan"] += allocated
     
     def generate_report(self, csv_prefix: Optional[str] = None, day_table: bool = False) -> str:
         """Generate a complete report.
@@ -156,29 +215,26 @@ class ReportGenerator:
             output: StringIO to write to
             csv_prefix: Prefix for CSV files (optional)
         """
-        # Calculate subproject durations and plan differences
         subproject_durations = defaultdict(int)
-        subproject_plan_diffs = defaultdict(lambda: {"less_plan": 0, "more_plan": 0})
         
         for entry in self.entries:
             key = (entry.task_name, entry.project_name)
             subproject_durations[key] += entry.duration_sec
-
-        for occ in self.occurrences:
-            if occ["planned"] <= 0:
-                continue
-            key = (occ["task_name"], occ["project"])
-            diff = occ["diff"]
-            if diff > 0:
-                subproject_plan_diffs[key]["more_plan"] += diff
-            elif diff < 0:
-                subproject_plan_diffs[key]["less_plan"] += abs(diff)
         
         if subproject_durations:
+            if self.mode == "week":
+                percent_header = "%/Week"
+            elif self.mode == "month":
+                percent_header = "%/Month"
+            elif self.mode == "year":
+                percent_header = "%/Year"
+            else:
+                percent_header = "%/Day"
+            
             subproject_table = []
             for (subproject, project), secs in subproject_durations.items():
-                more_plan = subproject_plan_diffs[(subproject, project)]["more_plan"]
-                less_plan = subproject_plan_diffs[(subproject, project)]["less_plan"]
+                more_plan = self.subproject_plan_diffs[(subproject, project)]["more_plan"]
+                less_plan = self.subproject_plan_diffs[(subproject, project)]["less_plan"]
                 more_plan_percent = percent(more_plan, secs) if secs > 0 else "0"
                 less_plan_percent = percent(less_plan, secs) if secs > 0 else "0"
                 
@@ -197,7 +253,7 @@ class ReportGenerator:
             
             subproject_table.sort(key=lambda x: parse_duration_for_sort(x[5]), reverse=True)
             print(f"\n### Time by SubProject {self.date_range_str}:", file=output)
-            print(tabulate(subproject_table, headers=["SubProject", "Project", "%/Day", "Meas>Plan%", "Meas<Plan%", "Duration"], tablefmt="github"), file=output)
+            print(tabulate(subproject_table, headers=["SubProject", "Project", percent_header, "Meas>Plan%", "Meas<Plan%", "Duration"], tablefmt="github"), file=output)
             
             # Export to CSV if requested
             if csv_prefix:
@@ -211,20 +267,6 @@ class ReportGenerator:
             output: StringIO to write to
             csv_prefix: Prefix for CSV files (optional)
         """
-        # Calculate project plan differences
-        project_plan_diffs = defaultdict(lambda: {"less_plan": 0, "more_plan": 0})
-
-        for occ in self.occurrences:
-            if occ["planned"] <= 0:
-                continue
-            project = occ["project"]
-            diff = occ["diff"]
-            if diff > 0:
-                project_plan_diffs[project]["more_plan"] += diff
-            elif diff < 0:
-                project_plan_diffs[project]["less_plan"] += abs(diff)
-        
-        # Determine the correct percent header
         if self.mode == "week":
             percent_header = "%/Week"
         elif self.mode == "month":
@@ -234,11 +276,10 @@ class ReportGenerator:
         else:
             percent_header = "%/Day"
         
-        # Create project table
         proj_table = []
         for proj, secs in sorted(self.project_durations.items(), key=lambda x: x[1], reverse=True):
-            more_plan = project_plan_diffs[proj]["more_plan"]
-            less_plan = project_plan_diffs[proj]["less_plan"]
+            more_plan = self.project_plan_diffs[proj]["more_plan"]
+            less_plan = self.project_plan_diffs[proj]["less_plan"]
             more_plan_percent = percent(more_plan, secs) if secs > 0 else "0"
             less_plan_percent = percent(less_plan, secs) if secs > 0 else "0"
             
@@ -268,40 +309,6 @@ class ReportGenerator:
         if not self.tag_durations:
             return
         
-        # Calculate tag plan differences
-        tag_plan_diffs = defaultdict(lambda: {"less_plan": 0, "more_plan": 0})
-
-        for occ in self.occurrences:
-            if occ["planned"] <= 0:
-                continue
-            diff = occ["diff"]
-            if diff == 0:
-                continue
-
-            tag_durations = defaultdict(int)
-            total_duration = 0
-            for entry in occ["entries"]:
-                total_duration += entry.duration_sec
-                for tag in entry.tag_names:
-                    tag_durations[tag] += entry.duration_sec
-
-            if not tag_durations:
-                continue
-
-            if total_duration <= 0:
-                total_duration = len(tag_durations)
-                for tag in tag_durations:
-                    tag_durations[tag] = 1
-
-            for tag, tag_duration in tag_durations.items():
-                share = tag_duration / total_duration
-                allocated = int(round(abs(diff) * share))
-                if diff > 0:
-                    tag_plan_diffs[tag]["more_plan"] += allocated
-                elif diff < 0:
-                    tag_plan_diffs[tag]["less_plan"] += allocated
-        
-        # Determine the correct percent header
         if self.mode == "week":
             percent_header = "%/Week"
         elif self.mode == "month":
@@ -311,7 +318,6 @@ class ReportGenerator:
         else:
             percent_header = "%/Day"
         
-        # Custom tag order
         custom_tag_order = ["🚨 & 🍭", "🚨 & 🥵", "🐢 & 🍭", "🐢 & 🥵"]
         def tag_sort_key(item):
             tag = item[0]
@@ -319,11 +325,10 @@ class ReportGenerator:
                 return (custom_tag_order.index(tag), tag)
             return (len(custom_tag_order), tag)
         
-        # Create tag table
         tag_table = []
         for tag, secs in self.tag_durations.items():
-            more_plan = tag_plan_diffs[tag]["more_plan"]
-            less_plan = tag_plan_diffs[tag]["less_plan"]
+            more_plan = self.tag_plan_diffs[tag]["more_plan"]
+            less_plan = self.tag_plan_diffs[tag]["less_plan"]
             more_plan_percent = percent(more_plan, secs) if secs > 0 else "0"
             less_plan_percent = percent(less_plan, secs) if secs > 0 else "0"
             
@@ -355,25 +360,6 @@ class ReportGenerator:
         if spont_total == 0:
             return
         
-        # Calculate spontaneity plan differences
-        spont_plan_diffs = defaultdict(lambda: {"less_plan": 0, "more_plan": 0})
-
-        for occ in self.occurrences:
-            if occ["planned"] <= 0:
-                continue
-            first_entry = occ["entries"][0] if occ["entries"] else None
-            if not first_entry:
-                continue
-            if not (first_entry.is_spontaneous or first_entry.is_scheduled):
-                continue
-            symbol = "🎲" if first_entry.is_spontaneous else "🗓️"
-            diff = occ["diff"]
-            if diff > 0:
-                spont_plan_diffs[symbol]["more_plan"] += diff
-            elif diff < 0:
-                spont_plan_diffs[symbol]["less_plan"] += abs(diff)
-        
-        # Determine the correct percent header
         if self.mode == "week":
             percent_header = "%/Week"
         elif self.mode == "month":
@@ -383,14 +369,13 @@ class ReportGenerator:
         else:
             percent_header = "%/Day"
         
-        # Create spontaneity table
         spont_order = ["🗓️", "🎲"]
         spont_table = []
         
         for symbol, secs in self.spontaneousity_durations.items():
             if secs > 0:
-                more_plan = spont_plan_diffs[symbol]["more_plan"]
-                less_plan = spont_plan_diffs[symbol]["less_plan"]
+                more_plan = self.spont_plan_diffs[symbol]["more_plan"]
+                less_plan = self.spont_plan_diffs[symbol]["less_plan"]
                 more_plan_percent = percent(more_plan, secs) if secs > 0 else "0"
                 less_plan_percent = percent(less_plan, secs) if secs > 0 else "0"
                 

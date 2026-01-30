@@ -18,11 +18,14 @@ def format_hm(seconds: int) -> str:
     """Format seconds as HH:MM.
     
     Args:
-        seconds: Number of seconds
+        seconds: Number of seconds (can be negative)
         
     Returns:
-        Formatted time string
+        Formatted time string (with leading '-' if negative)
     """
+    if seconds < 0:
+        abs_seconds = abs(seconds)
+        return f"-{abs_seconds // 3600:02}:{(abs_seconds % 3600) // 60:02}"
     return f"{seconds // 3600:02}:{(seconds % 3600) // 60:02}"
 
 def parse_clockify_duration(duration: str) -> int:

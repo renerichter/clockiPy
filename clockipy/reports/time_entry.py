@@ -102,8 +102,10 @@ class TimeEntry:
         """Get the difference between actual and planned duration.
         
         Returns:
-            Difference in seconds (positive if actual > planned)
+            Difference in seconds (positive if actual > planned), or 0 if no planned time
         """
+        if not self.planned_sec:
+            return 0
         return self.duration_sec - self.planned_sec
     
     @property

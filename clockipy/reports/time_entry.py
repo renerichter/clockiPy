@@ -1,5 +1,5 @@
 """TimeEntry class for representing and manipulating Clockify time entries."""
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 from ..utils.format_utils import parse_clockify_duration, parse_planned_from_name, format_hm
 
@@ -35,6 +35,7 @@ class TimeEntry:
         # Spontaneity
         self.is_spontaneous = "🎲" in self.description
         self.is_scheduled = "🗓️" in self.description
+        self.is_recurring = "🔁" in self.description
     
     @property
     def tags_str(self) -> str:
@@ -53,6 +54,21 @@ class TimeEntry:
             Formatted start time (HH:MM)
         """
         return self._format_time(self.start)
+
+    @property
+    def start_date(self) -> Optional[date]:
+        """Get the start date in UTC.
+
+        Returns:
+            Date portion of the start time, or None if unavailable
+        """
+        if not self.start:
+            return None
+        try:
+            dt_utc = datetime.fromisoformat(self.start.replace("Z", "+00:00"))
+            return dt_utc.date()
+        except Exception:
+            return None
     
     @property
     def end_hm(self) -> str:

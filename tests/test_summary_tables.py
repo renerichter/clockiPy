@@ -295,5 +295,204 @@ class TestYearMode(unittest.TestCase):
         self.assertIn("### Totals", report)
 
 
+class TestRecurringTaskHandling(unittest.TestCase):
+    """Test handling of recurring tasks across multiple days."""
+
+    def _create_entry(self, description, start, duration_str, project_id="p1", tag_ids=None):
+        return {
+            "description": description,
+            "timeInterval": {
+                "start": start,
+                "end": start,
+                "duration": duration_str
+            },
+            "projectId": project_id,
+            "tagIds": tag_ids or []
+        }
+
+    def _create_time_entries(self, entries, tag_map=None):
+        tag_map = tag_map or {}
+        result = []
+        for idx, entry in enumerate(entries):
+            tag_ids = entry.get("tagIds") or []
+            tag_names = [tag_map.get(tid, tid) for tid in tag_ids]
+            result.append(TimeEntry(entry, idx + 1, "Test Project", "", tag_names))
+        return result
+
+    def test_recurring_tasks_split_by_day_for_deviations(self):
+        entries = [
+            self._create_entry("Daily Task 🔁 {p1:00}", "2023-01-01T10:00:00Z", "PT1H30M"),
+            self._create_entry("Daily Task 🔁 {p1:00}", "2023-01-02T10:00:00Z", "PT30M"),
+        ]
+        time_entries = self._create_time_entries(entries)
+
+        report_gen = ReportGenerator(time_entries, "2023-01-01 to 2023-01-02", "week")
+
+        self.assertEqual(report_gen.plan_deviation_totals["over"], 1800)
+        self.assertEqual(report_gen.plan_deviation_totals["under"], 1800)
+        self.assertEqual(report_gen.plan_deviation_totals["abs"], 3600)
+
+    def test_non_recurring_tasks_aggregate_across_days(self):
+        entries = [
+            self._create_entry("Task {p1:00}", "2023-01-01T10:00:00Z", "PT1H30M"),
+            self._create_entry("Task {p1:00}", "2023-01-02T10:00:00Z", "PT30M"),
+        ]
+        time_entries = self._create_time_entries(entries)
+
+        report_gen = ReportGenerator(time_entries, "2023-01-01 to 2023-01-02", "week")
+
+        self.assertEqual(report_gen.plan_deviation_totals["over"], 0)
+        self.assertEqual(report_gen.plan_deviation_totals["under"], 0)
+        self.assertEqual(report_gen.plan_deviation_totals["abs"], 0)
+
+    def test_recurring_multiple_entries_same_day_aggregate_within_day(self):
+        """Multiple recurring entries on the same day should aggregate within that day."""
+        entries = [
+            self._create_entry("Daily 🔁 {p0:30}", "2023-01-01T10:00:00Z", "PT45M"),
+            self._create_entry("Daily 🔁 {p0:30}", "2023-01-01T14:00:00Z", "PT45M"),
+        ]
+        time_entries = self._create_time_entries(entries)
+
+        report_gen = ReportGenerator(time_entries, "2023-01-01", "normal")
+
+        self.assertEqual(len(report_gen.occurrences), 1)
+        self.assertEqual(report_gen.plan_deviation_totals["over"], 1800)
+        self.assertEqual(report_gen.plan_deviation_totals["under"], 0)
+
+    def test_recurring_task_missing_start_time_groups_together(self):
+        """Recurring tasks with missing start time should gracefully degrade."""
+        entries = [
+            self._create_entry("Task 🔁 {p1:00}", "", "PT1H30M"),
+            self._create_entry("Task 🔁 {p1:00}", "", "PT30M"),
+        ]
+        time_entries = self._create_time_entries(entries)
+
+        report_gen = ReportGenerator(time_entries, "unknown", "week")
+
+        self.assertEqual(len(report_gen.occurrences), 1)
+        occ = report_gen.occurrences[0]
+        self.assertIsNone(occ["date"])
+        self.assertEqual(occ["planned"], 7200)
+        self.assertEqual(occ["measured"], 7200)
+
+    def test_mixed_recurring_and_non_recurring_tasks(self):
+        """Non-recurring and recurring tasks should be handled independently."""
+        entries = [
+            self._create_entry("Non-recurring {p1:00}", "2023-01-01T10:00:00Z", "PT1H30M"),
+            self._create_entry("Non-recurring {p1:00}", "2023-01-02T10:00:00Z", "PT30M"),
+            self._create_entry("Recurring 🔁 {p1:00}", "2023-01-01T10:00:00Z", "PT1H30M"),
+            self._create_entry("Recurring 🔁 {p1:00}", "2023-01-02T10:00:00Z", "PT30M"),
+        ]
+        time_entries = self._create_time_entries(entries)
+
+        report_gen = ReportGenerator(time_entries, "2023-01-01 to 2023-01-02", "week")
+
+        self.assertEqual(len(report_gen.occurrences), 3)
+        self.assertEqual(report_gen.plan_deviation_totals["over"], 1800)
+        self.assertEqual(report_gen.plan_deviation_totals["under"], 1800)
+
+
+class TestMultiTagProportionalAllocation(unittest.TestCase):
+    """Test that tag deviations are allocated proportionally by entry duration."""
+
+    def _create_entry(self, description, start, duration_str, project_id="p1", tag_ids=None):
+        return {
+            "description": description,
+            "timeInterval": {
+                "start": start,
+                "end": start,
+                "duration": duration_str
+            },
+            "projectId": project_id,
+            "tagIds": tag_ids or []
+        }
+
+    def test_tag_deviation_proportional_allocation(self):
+        """Tag deviations should be allocated proportionally by entry duration within occurrence."""
+        entries = [
+            self._create_entry("Task {p1:00}", "2023-01-01T10:00:00Z", "PT2H30M", tag_ids=["tagA"]),
+            self._create_entry("Task {p1:00}", "2023-01-01T14:00:00Z", "PT30M", tag_ids=["tagB"]),
+        ]
+        tag_map = {"tagA": "Tag A", "tagB": "Tag B"}
+        time_entries = []
+        for idx, entry in enumerate(entries):
+            tag_ids = entry.get("tagIds") or []
+            tag_names = [tag_map.get(tid, tid) for tid in tag_ids]
+            time_entries.append(TimeEntry(entry, idx + 1, "Test Project", "", tag_names))
+
+        report_gen = ReportGenerator(time_entries, "2023-01-01", "normal")
+
+        self.assertEqual(report_gen.plan_deviation_totals["over"], 3600)
+
+    def test_entry_with_no_tags_excluded_from_tag_allocation(self):
+        """Entries with no tags should not affect tag table."""
+        entry = {
+            "description": "NoTag {p0:30}",
+            "timeInterval": {
+                "start": "2023-01-01T10:00:00Z",
+                "end": "2023-01-01T11:00:00Z",
+                "duration": "PT1H"
+            },
+            "projectId": "p1",
+            "tagIds": []
+        }
+        time_entry = TimeEntry(entry, 1, "Test Project", "", [])
+
+        report_gen = ReportGenerator([time_entry], "2023-01-01", "normal")
+
+        self.assertEqual(len(report_gen.tag_durations), 0)
+        self.assertEqual(report_gen.plan_deviation_totals["over"], 1800)
+
+
+class TestOccurrenceGrouping(unittest.TestCase):
+    """Test that occurrences are correctly grouped."""
+
+    def _create_entry(self, description, start, duration_str, project="Proj", task=""):
+        return {
+            "description": description,
+            "timeInterval": {
+                "start": start,
+                "end": start,
+                "duration": duration_str
+            },
+            "projectId": "p1",
+            "taskId": "t1" if task else None,
+            "tagIds": []
+        }
+
+    def _create_time_entry(self, entry_dict, idx=1, project_name="Test Project", task_name=""):
+        return TimeEntry(entry_dict, idx, project_name, task_name, [])
+
+    def test_occurrences_count_matches_expected(self):
+        """Verify occurrence count for mixed recurring and non-recurring."""
+        entries = [
+            self._create_entry("A 🔁 {p1:00}", "2023-01-01T10:00:00Z", "PT1H"),
+            self._create_entry("A 🔁 {p1:00}", "2023-01-02T10:00:00Z", "PT1H"),
+            self._create_entry("A 🔁 {p1:00}", "2023-01-03T10:00:00Z", "PT1H"),
+            self._create_entry("B {p1:00}", "2023-01-01T10:00:00Z", "PT1H"),
+            self._create_entry("B {p1:00}", "2023-01-02T10:00:00Z", "PT1H"),
+        ]
+        time_entries = [self._create_time_entry(e, i+1) for i, e in enumerate(entries)]
+
+        report_gen = ReportGenerator(time_entries, "2023-01-01 to 2023-01-03", "week")
+
+        self.assertEqual(len(report_gen.occurrences), 4)
+
+    def test_project_table_uses_occurrences_for_deviations(self):
+        """Project table deviations should come from occurrences, not entries."""
+        entries = [
+            self._create_entry("Task 🔁 {p1:00}", "2023-01-01T10:00:00Z", "PT1H30M"),
+            self._create_entry("Task 🔁 {p1:00}", "2023-01-02T10:00:00Z", "PT30M"),
+        ]
+        time_entries = [self._create_time_entry(e, i+1) for i, e in enumerate(entries)]
+
+        report_gen = ReportGenerator(time_entries, "2023-01-01 to 2023-01-02", "week")
+        report = report_gen.generate_report(None, False)
+
+        self.assertIn("Test Project", report)
+        self.assertIn("Meas>Plan%", report)
+        self.assertIn("Meas<Plan%", report)
+
+
 if __name__ == '__main__':
-    unittest.main() 
+    unittest.main()

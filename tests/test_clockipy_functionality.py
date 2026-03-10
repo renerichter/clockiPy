@@ -1,5 +1,6 @@
 import sys
 import os
+import tempfile
 import unittest
 from unittest.mock import patch, MagicMock, mock_open
 from datetime import datetime, date, timedelta
@@ -8,7 +9,7 @@ import json
 
 # Add the parent directory to sys.path to import the clockipy package
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from clockipy.__main__ import date_interface, main
+from clockipy.__main__ import date_interface, load_env_file, load_environment, main, resolve_user_id
 from clockipy.utils.format_utils import parse_clockify_duration, parse_planned_from_name
 
 class TestClockipyFunctionality(unittest.TestCase):
@@ -156,6 +157,72 @@ class TestClockipyFunctionality(unittest.TestCase):
             'CLOCKIFY_USER_ID': 'test_user_id'
         }
         return env_vars.get(key, '')
+
+    @patch('clockipy.__main__.load_env_file')
+    def test_load_environment_prefers_existing_environment(self, mock_load_env_file):
+        """Existing process env should win over file loading."""
+        load_environment()
+        mock_load_env_file.assert_not_called()
+
+    @patch.dict('os.environ', {}, clear=True)
+    @patch('clockipy.__main__.candidate_env_files', return_value=['/tmp/rene.env', '/tmp/clockipy.env'])
+    @patch('clockipy.__main__.os.path.exists')
+    @patch('clockipy.__main__.load_env_file')
+    def test_load_environment_uses_rene_env_fallback(self, mock_load_env_file, mock_exists, mock_candidate_files):
+        """~/rene.env should be sufficient when the shell environment is empty."""
+        mock_exists.side_effect = lambda path: path == '/tmp/rene.env'
+
+        def fake_load_env_file(path):
+            self.assertEqual(path, '/tmp/rene.env')
+            os.environ['CLOCKIFY_API_KEY'] = 'test_api_key'
+            os.environ['CLOCKIFY_WORKSPACE_ID'] = 'test_workspace_id'
+            os.environ['CLOCKIFY_USER_ID'] = 'test_user_id'
+
+        mock_load_env_file.side_effect = fake_load_env_file
+
+        load_environment()
+
+        mock_candidate_files.assert_called_once()
+        mock_load_env_file.assert_called_once_with('/tmp/rene.env')
+
+    @patch.dict('os.environ', {}, clear=True)
+    def test_load_env_file_supports_export_prefix(self):
+        """The loader should support both export-prefixed and plain env lines."""
+        with tempfile.NamedTemporaryFile('w', delete=False) as handle:
+            handle.write('export CLOCKIFY_API_KEY="test_api_key"\n')
+            handle.write('CLOCKIFY_WORKSPACE_ID=test_workspace_id\n')
+            handle.write('export CLOCKIFY_USER_ID="test_user_id"\n')
+            temp_path = handle.name
+
+        try:
+            load_env_file(temp_path)
+        finally:
+            os.unlink(temp_path)
+
+        self.assertEqual(os.environ['CLOCKIFY_API_KEY'], 'test_api_key')
+        self.assertEqual(os.environ['CLOCKIFY_WORKSPACE_ID'], 'test_workspace_id')
+        self.assertEqual(os.environ['CLOCKIFY_USER_ID'], 'test_user_id')
+
+    @patch.dict('os.environ', {'CLOCKIFY_API_KEY': 'test_api_key', 'CLOCKIFY_WORKSPACE_ID': 'test_workspace_id'}, clear=True)
+    @patch('clockipy.__main__.ClockifyClient.get_user_and_workspaces', return_value=({'id': 'derived_user_id'}, []))
+    def test_resolve_user_id_from_api_when_missing(self, mock_get_user_and_workspaces):
+        """CLOCKIFY_USER_ID should be derived from Clockify when omitted."""
+        user_id = resolve_user_id('test_api_key', 'test_workspace_id')
+        self.assertEqual(user_id, 'derived_user_id')
+        mock_get_user_and_workspaces.assert_called_once()
+
+    @patch.dict('os.environ', {}, clear=True)
+    @patch('clockipy.__main__.candidate_env_files', return_value=['/tmp/rene.env', '/tmp/clockipy.env'])
+    @patch('clockipy.__main__.os.path.exists', return_value=False)
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_load_environment_exits_without_any_credentials(self, mock_stdout, mock_exists, mock_candidate_files):
+        """A clear error should be raised when no env source is available."""
+        with self.assertRaises(SystemExit):
+            load_environment()
+
+        output = mock_stdout.getvalue()
+        self.assertIn('Missing Clockify credentials.', output)
+        self.assertIn('Checked current environment, ~/rene.env, and clockipy.env.', output)
     
     @patch('clockipy.api.client.ClockifyClient.get_time_entries')
     @patch('clockipy.api.client.ClockifyClient.get_project_and_tag_mappings')

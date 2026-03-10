@@ -22,7 +22,6 @@ setup(
     install_requires=[
         "requests",
         "tabulate",
-        "python-dotenv",
         "markdown",
     ],
     entry_points={

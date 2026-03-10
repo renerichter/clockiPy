@@ -1,1 +1,2 @@
-include clockipy.env.example 
+include clockipy.env.example
+include scripts/bootstrap_venv.sh

@@ -13,55 +13,23 @@ A CLI tool for fetching and displaying [Clockify](https://clockify.me/) time ent
 
 ## Python Environment Setup
 
-This project supports two Python environment options. **Use conda if available** (preferred), otherwise fall back to venv.
+This project uses a project-local virtual environment in `.venv`.
 
-### Option 1: Conda Environment (Preferred)
-
-If the `worktime` conda environment exists, use it:
+### Bootstrap (recommended)
 
 ```bash
-# Activate the worktime conda environment
-conda activate worktime
-
-# Verify activation
-conda info --envs | grep worktime
-
-# Install dependencies (if not already installed)
-pip install -r requirements.txt
-
-# Install package in editable mode
-pip install -e .
+./scripts/bootstrap_venv.sh
+source .venv/bin/activate
 ```
 
-### Option 2: Local Virtual Environment (Fallback)
-
-If conda is not available or `worktime` doesn't exist:
+### Manual setup
 
 ```bash
-# Create virtual environment (one-time setup)
 python3 -m venv .venv
-
-# Activate virtual environment
 source .venv/bin/activate   # macOS/Linux
 # .venv\Scripts\activate    # Windows
-
-# Install dependencies
 pip install -r requirements.txt
-
-# Install package in editable mode
 pip install -e .
-```
-
-### Environment Detection (for scripts/automation)
-
-```bash
-# Check if conda worktime exists and activate, otherwise use venv
-if conda activate worktime 2>/dev/null; then
-    echo "Using conda worktime"
-else
-    source .venv/bin/activate
-    echo "Using local venv"
-fi
 ```
 
 ## Installation
@@ -91,6 +59,8 @@ Or run the module directly:
 ```bash
 python -m clockipy --start 2024-05-15 --end 2024-05-22
 ```
+
+Prefer the `clockipy` command once the package is installed. `python -m clockipy` assumes `python` resolves to the active environment's interpreter.
 
 ### Example commands
 
@@ -126,19 +96,25 @@ python -m clockipy --start 2024-05-15 --end 2024-05-22
 
 ## Environment Setup
 
-Copy the example environment file and fill in your Clockify credentials:
+Preferred setup: export these values in your shell environment, for example from `~/rene.env` if you use the dotfiles repo:
+
+- `CLOCKIFY_API_KEY` — Your Clockify API key
+- `CLOCKIFY_WORKSPACE_ID` — Your workspace ID
+- `CLOCKIFY_USER_ID` — Optional; `clockipy` can derive it from the Clockify API if omitted
+
+`clockipy` checks credentials in this order:
+
+1. Existing process environment
+2. `~/rene.env`
+3. Repo-local `clockipy.env`
+
+Optional fallback if you do not use shell exports:
 
 ```bash
 cp clockipy.env.example clockipy.env
 ```
 
-Edit `clockipy.env` and set:
-
-- `CLOCKIFY_API_KEY` — Your Clockify API key
-- `CLOCKIFY_WORKSPACE_ID` — Your workspace ID
-- `CLOCKIFY_USER_ID` — Your user ID
-
-**Do not commit your filled `clockipy.env` to version control!**
+**Do not commit your filled `clockipy.env` to version control.**
 
 ## Planned vs. Measured Time
 
@@ -192,16 +168,8 @@ clockipy/
 
 Tests use Python's built-in `unittest` framework.
 
-**With conda (preferred):**
-
 ```bash
-conda activate worktime
-python -m unittest discover tests/ -v
-```
-
-**With venv:**
-
-```bash
+./scripts/bootstrap_venv.sh
 source .venv/bin/activate
 python -m unittest discover tests/ -v
 ```
@@ -264,8 +232,8 @@ MIT
 
 ### Environment Priority
 
-1. `conda activate worktime` (if exists)
-2. `source .venv/bin/activate` (fallback)
+1. `./scripts/bootstrap_venv.sh`
+2. `source .venv/bin/activate`
 
 ### Key Files
 
@@ -292,4 +260,4 @@ python -m clockipy --mode month --start 2025-01-15
 
 ### Dependencies
 
-`requests`, `tabulate`, `python-dotenv`, `markdown` (see `requirements.txt`)
+`requests`, `tabulate`, `markdown` (see `requirements.txt`)

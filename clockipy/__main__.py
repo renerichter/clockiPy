@@ -1,10 +1,10 @@
 """Main module for the clockiPy package."""
 import os
+import shlex
 import sys
 import argparse
 from datetime import datetime, date, timedelta
 from typing import Optional
-from dotenv import load_dotenv
 from collections import defaultdict
 
 from .api.client import ClockifyClient
@@ -13,14 +13,84 @@ from .utils.file_utils import write_markdown
 from .reports.time_entry import TimeEntry
 from .reports.report_generator import ReportGenerator
 
+REQUIRED_ENV_VARS = (
+    "CLOCKIFY_API_KEY",
+    "CLOCKIFY_WORKSPACE_ID",
+)
+
 # --- Environment Setup ---
+def has_required_env() -> bool:
+    """Return True when all required Clockify env vars are set."""
+    return all(os.getenv(key) for key in REQUIRED_ENV_VARS)
+
+def candidate_env_files():
+    """Return env files to try after the current process environment."""
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return [
+        os.path.join(os.path.expanduser("~"), "rene.env"),
+        os.path.join(repo_root, "clockipy.env"),
+    ]
+
+def load_env_file(env_file: str) -> None:
+    """Load KEY=value pairs from an env file without overriding existing vars."""
+    with open(env_file, "r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):].lstrip()
+            if "=" not in line:
+                continue
+
+            key, raw_value = line.split("=", 1)
+            key = key.strip()
+            if not key or key in os.environ:
+                continue
+
+            raw_value = raw_value.strip()
+            if raw_value:
+                try:
+                    parts = shlex.split(raw_value, posix=True)
+                except ValueError:
+                    parts = [raw_value.strip("'\"")]
+                value = parts[0] if len(parts) == 1 else " ".join(parts)
+            else:
+                value = ""
+
+            os.environ[key] = value
+
 def load_environment():
-    """Load environment variables from the clockipy.env file."""
-    env_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'clockipy.env')
-    if not os.path.exists(env_file):
-        print(f"Missing environment file: {env_file}")
+    """Load Clockify credentials from env, ~/rene.env, or local clockipy.env."""
+    if has_required_env():
+        return
+
+    for env_file in candidate_env_files():
+        if not os.path.exists(env_file):
+            continue
+        load_env_file(env_file)
+        if has_required_env():
+            return
+
+    print("Missing Clockify credentials.")
+    print("Set CLOCKIFY_API_KEY and CLOCKIFY_WORKSPACE_ID in your environment.")
+    print("CLOCKIFY_USER_ID is optional and will be auto-detected when missing.")
+    print("Checked current environment, ~/rene.env, and clockipy.env.")
+    sys.exit(1)
+
+def resolve_user_id(api_key: str, workspace_id: str) -> str:
+    """Return CLOCKIFY_USER_ID from env or derive it from the Clockify API."""
+    user_id = os.getenv("CLOCKIFY_USER_ID")
+    if user_id:
+        return user_id
+
+    client = ClockifyClient(api_key, workspace_id, "")
+    user, _ = client.get_user_and_workspaces()
+    user_id = user.get("id")
+    if not user_id:
+        print("Unable to determine CLOCKIFY_USER_ID from the Clockify API.")
         sys.exit(1)
-    load_dotenv(env_file)
+    return user_id
 
 def get_env_var(key: str) -> str:
     """Get an environment variable or exit if not found.
@@ -36,7 +106,7 @@ def get_env_var(key: str) -> str:
     """
     value = os.getenv(key)
     if not value:
-        print(f"Set {key} in your environment or clockipy.env.")
+        print(f"Set {key} in your environment, ~/rene.env, or clockipy.env.")
         sys.exit(1)
     return value
 
@@ -148,7 +218,7 @@ def date_interface(start_str: Optional[str] = None, end_str: Optional[str] = Non
     # Initialize API client
     api_key = get_env_var("CLOCKIFY_API_KEY")
     workspace_id = get_env_var("CLOCKIFY_WORKSPACE_ID")
-    user_id = get_env_var("CLOCKIFY_USER_ID")
+    user_id = resolve_user_id(api_key, workspace_id)
     client = ClockifyClient(api_key, workspace_id, user_id)
     
     # Get time entries

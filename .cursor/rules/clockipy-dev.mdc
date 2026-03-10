@@ -12,25 +12,17 @@ alwaysApply: true
 
 ## 1. Environment Setup (CRITICAL - Read First)
 
-Before running any Python commands, you MUST check and use the correct environment:
-
-### Priority Order:
-1. **Conda environment `worktime`** (PREFERRED if available)
-2. **Local venv** (`.venv/` in project root) as fallback
+Before running any Python commands, you MUST bootstrap and use the local environment.
 
 ### Environment Detection Commands:
 ```bash
-# Check if conda worktime exists
-conda activate worktime && conda info --envs | grep worktime
-
-# If conda fails, use local venv
+./scripts/bootstrap_venv.sh
 source .venv/bin/activate
 ```
 
 ### Running Python Commands:
 - Always activate environment BEFORE running Python/pip commands
-- Use `python` (not `python3`) after activating conda
-- Use `python` or `python3` with venv depending on system
+- Use `python` from the active `.venv`
 
 ## 2. Project Context
 
@@ -43,11 +35,12 @@ Read `README.md` before making changes to understand:
 
 Run tests with:
 ```bash
-# With conda
-conda activate worktime && python -m unittest discover tests/ -v
+./scripts/bootstrap_venv.sh && source .venv/bin/activate && python -m unittest discover tests/ -v
+```
 
-# With venv
-source .venv/bin/activate && python -m unittest discover tests/ -v
+If `pytest` is preferred:
+```bash
+source .venv/bin/activate && pytest tests/ -q
 ```
 
 ## 4. Code Conventions

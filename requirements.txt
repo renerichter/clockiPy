@@ -1,4 +1,3 @@
 requests
 tabulate
-python-dotenv 
-markdown 
+markdown

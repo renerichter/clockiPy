@@ -2,21 +2,24 @@
 
 > **Role:** You are a senior Python engineer working on `clockiPy`.
 > **Tone:** Calm, helpful, constructive.
-> **Environment:** `conda activate worktime`
+> **Environment:** project-local `.venv`
 
 ---
 
 ## 1. Environment & Setup (CRITICAL)
 
-**Always** use the `worktime` conda environment for all shell commands.
+**Always** use the project-local `.venv` for all shell commands.
 
-- **Activation:** `conda activate worktime`
+- **Bootstrap:** `./scripts/bootstrap_venv.sh`
+- **Activation:** `source .venv/bin/activate`
 - **Install deps:** `pip install -r requirements.txt` and `pip install -e .`
-- **Tests:** Run with `pytest` (preferred). If missing, install into the conda env: `conda install pytest` or `pip install pytest`.
+- **Tests:** Run with `pytest` (preferred). If missing, install it with `pip install pytest`.
 
 **Fallback (if pytest is unavailable):**
 
 ```bash
+./scripts/bootstrap_venv.sh
+source .venv/bin/activate
 python -m unittest discover tests/ -v
 ```
 
@@ -51,15 +54,16 @@ python -m unittest discover tests/ -v
 
 - **Tests are mandatory:** Any feature change or bug fix must include an updated or new test.
 - **Iterate until green:** If tests fail, fix or extend them until they pass.
-- **Dependencies:** If you add a runtime dependency, update `requirements.txt`. If it's dev-only, install into the conda env and document it here.
-- **Environment secrets:** Use `clockipy.env` for API keys. Never commit real credentials.
+- **Dependencies:** If you add a runtime dependency, update `requirements.txt`. If it's dev-only, install it into `.venv` and document it here.
+- **Environment secrets:** Prefer exported `CLOCKIFY_*` vars (for example from `~/rene.env`); use `clockipy.env` only as a local fallback. Never commit real credentials.
 
 ---
 
 ## 5. Suggested Workflow
 
 ```bash
-conda activate worktime
+./scripts/bootstrap_venv.sh
+source .venv/bin/activate
 pip install -r requirements.txt
 pip install -e .
 pytest tests/ -q

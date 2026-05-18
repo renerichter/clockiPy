@@ -1,6 +1,7 @@
 """Date utility functions for clockiPy."""
-from datetime import datetime, date, time, timezone, timedelta
 import calendar
+from datetime import date, datetime, time, timedelta, timezone
+
 
 def iso_datetime(dt: date, is_end: bool = False) -> str:
     """Convert a date to an ISO datetime string.
@@ -64,6 +65,6 @@ def day_str(dt: date) -> str:
         dt: Date to format
         
     Returns:
-        Formatted date string
+        Formatted date string like '(Mon) 2026-04-27'
     """
-    return f"({['Mo','Tue','Wed','Thu','Fri','Sat','Sun'][dt.weekday()]}){dt}" 
+    return f"({['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][dt.weekday()]}) {dt}"

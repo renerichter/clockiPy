@@ -1,6 +1,7 @@
 """Formatting utility functions for clockiPy."""
 import re
 
+
 def format_seconds(seconds: int) -> str:
     """Format seconds as HH:MM:SS.
     
@@ -39,11 +40,11 @@ def parse_clockify_duration(duration: str) -> int:
     """
     if not duration:
         return 0
-    
+
     match = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration)
     if not match:
         return 0
-    
+
     h, m, s = match.groups(default="0")
     return int(h) * 3600 + int(m) * 60 + int(s)
 
@@ -59,7 +60,7 @@ def parse_planned_from_name(name: str) -> int:
     match = re.search(r"\{p(\d+):(\d{1,2})\}", name)
     if not match:
         return 0
-    
+
     hours, minutes = match.groups()
     try:
         return int(hours) * 3600 + int(minutes) * 60
@@ -76,4 +77,4 @@ def percent(val: int, total: int) -> str:
     Returns:
         Formatted percentage string
     """
-    return f"{(val / total * 100):.0f}" if total else "0" 
+    return f"{(val / total * 100):.0f}" if total else "0"

@@ -7,4 +7,4 @@ clockiPy: A CLI tool for fetching and displaying Clockify time entries in a clea
 - Can be used as a CLI (via `python -m clockipy` or `clockipy` if installed as a package)
 """
 
-__version__ = "0.2.0" 
+__version__ = "0.2.0"

@@ -14,7 +14,7 @@ if [[ -z "${PYTHON_BIN}" ]]; then
 fi
 STAMP_FILE="${VENV_DIR}/.bootstrap_stamp"
 REQ_FILE="${PROJECT_ROOT}/requirements.txt"
-SETUP_FILE="${PROJECT_ROOT}/setup.py"
+SETUP_FILE="${PROJECT_ROOT}/pyproject.toml"
 
 needs_install=0
 recreate_venv=0
@@ -41,7 +41,6 @@ fi
 
 if [[ "${needs_install}" -eq 1 ]]; then
   "${VENV_DIR}/bin/python" -m pip install --upgrade pip
-  "${VENV_DIR}/bin/pip" install -r "${REQ_FILE}"
-  "${VENV_DIR}/bin/pip" install -e "${PROJECT_ROOT}"
+  "${VENV_DIR}/bin/pip" install -e "${PROJECT_ROOT}[dev]"
   date -u +"%Y-%m-%dT%H:%M:%SZ" > "${STAMP_FILE}"
 fi

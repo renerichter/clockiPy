@@ -2,4 +2,4 @@
 
 from .client import ClockifyClient
 
-__all__ = ['ClockifyClient'] 
+__all__ = ['ClockifyClient']

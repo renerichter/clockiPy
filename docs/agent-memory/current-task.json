@@ -1,0 +1,60 @@
+{
+  "id": "clockipy-improve-2026-05",
+  "title": "clockiPy hardening + productivity-coach evolution",
+  "owner": "rene",
+  "audience": "personal",
+  "north_star": "Best-in-class personal time-analytics CLI; evolve into a productivity coach that surfaces drift and patterns.",
+  "status": "complete",
+  "phases": [
+    {"id": "P0", "name": "foundation: pyproject + dev extras + plan + cleanup", "status": "complete"},
+    {"id": "P1", "name": "critical bugs: TZ-local recurring grouping; HTTP timeout/retry/pagination/error surfacing", "status": "complete"},
+    {"id": "P2", "name": "refactor: split __main__.py into cli/env/orchestrator", "status": "complete"},
+    {"id": "P3", "name": "UX/observability: logging + --verbose/--quiet; drop markdown dep", "status": "complete", "notes": "rich-table swap deferred to avoid breaking md export parity"},
+    {"id": "P4", "name": "perf: only-referenced-project task fetches + parallel", "status": "complete"},
+    {"id": "P5", "name": "persistence: SQLite cache + --refresh + --no-cache", "status": "complete"},
+    {"id": "P6", "name": "coach: goals/burn-down + digest + anomaly callouts", "status": "complete"},
+    {"id": "P7", "name": "tests: property + smoke + CI workflow", "status": "complete", "notes": "ruff scope narrowed to E/F/W/I; UP/SIM/B deferred"},
+    {"id": "P8", "name": "docs: README rewrite", "status": "complete"},
+    {"id": "P9", "name": "cursor-config: /improve-project command + project-improvement skill", "status": "complete"},
+    {"id": "P10", "name": "prompt reflection: folded learnings into P9 skill", "status": "complete"},
+    {"id": "P11", "name": "docs restructure: docs/* (architecture, credentials, cache, goals-and-digest, planned-vs-measured, cli-reference, development, troubleshooting) + README in 60s-onboarding style", "status": "complete"},
+    {"id": "P12", "name": "skill upgrade: embed Phase 8 Documentation blueprint inline in project-improvement SKILL (machine-agnostic, no abs paths, no external links)", "status": "complete"}
+  ],
+  "decisions": {
+    "audience": "personal-only",
+    "tz_semantics": "local-by-default via TimeEntry.start_date()",
+    "env_precedence": "process env > ~/rene.env > project clockipy.env",
+    "packaging": "pyproject.toml PEP 621 + [dev] extras (no setup.py)",
+    "logging": "stdlib logging + tabulate (rich swap deferred)",
+    "persistence": "SQLite under $XDG_CACHE_HOME, per-(workspace,user) DB, schema-version rebuild",
+    "delivery": "CLI: report modes + --goals + --digest",
+    "goals_config": "$XDG_CONFIG_HOME/clockipy/goals.yml",
+    "cache_refresh": "fresh if <1h AND range covered, else refetch+merge; --refresh forces, --no-cache disables",
+    "anomaly_detection": "|Δ|>25% vs 4w median, gated on ≥2 prior weeks of cached data"
+  },
+  "metrics": {
+    "tests_total": 117,
+    "subtests": 16,
+    "coverage_pct": 83.12,
+    "coverage_gate_pct": 80,
+    "ruff_violations": 0
+  },
+  "deliverables": {
+    "clockipy": "117 tests green, 83% coverage, ruff clean, CI workflow committed; README + docs/ restructured for <60s onboarding",
+    "docs": [
+      "README.md",
+      "docs/architecture.md",
+      "docs/credentials.md",
+      "docs/cache.md",
+      "docs/goals-and-digest.md",
+      "docs/planned-vs-measured.md",
+      "docs/cli-reference.md",
+      "docs/development.md",
+      "docs/troubleshooting.md"
+    ],
+    "reusable": [
+      "cursor-config/.cursor/commands/improve-project.md (documentation phase + portability mandate)",
+      "cursor-config/.agents/skills/project-improvement/SKILL.md (Phase 8 inline blueprint + verification gates + portability rules)"
+    ]
+  }
+}

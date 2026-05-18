@@ -54,4 +54,4 @@ source .venv/bin/activate && pytest tests/ -q
 
 - Defined in `requirements.txt`
 - Install with: `pip install -r requirements.txt`
-- Main deps: requests, tabulate, python-dotenv, markdown
+- Main deps: requests, tabulate, rich, pyyaml (markdown dep removed — see file_utils._validate_markdown)
